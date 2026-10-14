@@ -1,5 +1,10 @@
 import * as SQLite from 'expo-sqlite';
 import { Contact, ContactInsert } from '../types/contact';
+import { initDatabase } from './database';
+import {
+  findDuplicateContactMatches,
+  type DuplicateContactMatch,
+} from '../utils/contactSaving';
 
 // Internal type mirroring the DB row
 interface DBContactRow {
@@ -14,6 +19,7 @@ interface DBContactRow {
   linkedin: string | null;
   notes: string | null;
   image_path: string | null;
+  raw_ocr_text: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -30,7 +36,7 @@ export class ContactRepository {
   private db: SQLite.SQLiteDatabase | null = null;
 
   async init() {
-    this.db = await SQLite.openDatabaseAsync('cardapp.db');
+    this.db = await initDatabase();
   }
 
   async getRecent(limit: number = 5): Promise<Contact[]> {
@@ -66,8 +72,8 @@ export class ContactRepository {
     
     const result = await this.db!.runAsync(
       `INSERT INTO contacts (
-        name, designation, company, phones, emails, website, address, linkedin, notes, image_path, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        name, designation, company, phones, emails, website, address, linkedin, notes, image_path, raw_ocr_text, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         contact.name,
         contact.designation,
@@ -79,6 +85,7 @@ export class ContactRepository {
         contact.linkedin,
         contact.notes,
         contact.image_path,
+        contact.raw_ocr_text,
         now,
         now
       ]
@@ -100,7 +107,7 @@ export class ContactRepository {
     
     await this.db!.runAsync(
       `UPDATE contacts SET 
-        name = ?, designation = ?, company = ?, phones = ?, emails = ?, website = ?, address = ?, linkedin = ?, notes = ?, image_path = ?, updated_at = ?
+        name = ?, designation = ?, company = ?, phones = ?, emails = ?, website = ?, address = ?, linkedin = ?, notes = ?, image_path = ?, raw_ocr_text = ?, updated_at = ?
        WHERE id = ?`,
       [
         updated.name,
@@ -113,6 +120,7 @@ export class ContactRepository {
         updated.linkedin,
         updated.notes,
         updated.image_path,
+        updated.raw_ocr_text,
         now,
         id
       ]
@@ -132,6 +140,14 @@ export class ContactRepository {
       [searchStr, searchStr]
     );
     return rows.map(mapRowToContact);
+  }
+
+  async findPotentialDuplicates(
+    phones: readonly string[],
+    emails: readonly string[]
+  ): Promise<DuplicateContactMatch[]> {
+    const contacts = await this.getAll();
+    return findDuplicateContactMatches(contacts, phones, emails);
   }
 }
 

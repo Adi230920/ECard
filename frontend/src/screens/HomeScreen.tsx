@@ -11,21 +11,21 @@ export const HomeScreen = ({ navigation }: HomeScreenProps) => {
   const isFocused = useIsFocused();
 
   useEffect(() => {
-    if (isFocused) {
-      loadRecentContacts();
-    }
-  }, [isFocused]);
+    if (!isFocused) return;
 
-  const loadRecentContacts = async () => {
-    try {
-      const contacts = await contactRepository.getRecent(5);
-      setRecentContacts(contacts);
-    } catch (error) {
-      console.error('Failed to load recent contacts:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const loadRecentContacts = async () => {
+      try {
+        const contacts = await contactRepository.getRecent(5);
+        setRecentContacts(contacts);
+      } catch (error) {
+        console.error('Failed to load recent contacts:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadRecentContacts();
+  }, [isFocused]);
 
   const handleScanCard = () => {
     navigation.navigate('Scan');
@@ -36,7 +36,7 @@ export const HomeScreen = ({ navigation }: HomeScreenProps) => {
   };
 
   const renderContactItem = ({ item }: { item: Contact }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.contactItem}
       onPress={() => handleContactPress(item.id)}
     >
@@ -59,7 +59,7 @@ export const HomeScreen = ({ navigation }: HomeScreenProps) => {
 
       <View style={styles.recentSection}>
         <Text style={styles.sectionTitle}>Recent Contacts</Text>
-        
+
         {loading ? (
           <ActivityIndicator size="small" color="#007AFF" style={styles.loader} />
         ) : recentContacts.length === 0 ? (

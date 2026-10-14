@@ -10,6 +10,7 @@ export interface Contact {
   linkedin: string | null;
   notes: string | null;
   image_path: string | null;
+  raw_ocr_text: string | null;
   created_at: string;
   updated_at: string;
 }

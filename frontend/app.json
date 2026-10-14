@@ -10,6 +10,7 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.cardapp.ecard",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -24,6 +25,12 @@
     "plugins": [
       "expo-sqlite",
       "expo-mlkit-ocr"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "9b2c86ac-4d9b-4720-87ff-7d371191a467"
+      }
+    },
+    "owner": "adityamh23"
   }
 }

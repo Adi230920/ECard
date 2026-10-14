@@ -1,4 +1,5 @@
 import { Contact, ContactInsert } from '../types/contact';
+import type { DuplicateContactMatch } from '../utils/contactSaving';
 
 export class ContactRepository {
   async init() {}
@@ -25,6 +26,13 @@ export class ContactRepository {
   
   async search(query: string): Promise<Contact[]> { 
     return []; 
+  }
+
+  async findPotentialDuplicates(
+    phones: readonly string[],
+    emails: readonly string[]
+  ): Promise<DuplicateContactMatch[]> {
+    return [];
   }
 }
 
