@@ -99,3 +99,25 @@ test('finds duplicates only through normalized phones and emails', () => {
   assert.deepEqual(matches[0].matchedPhones, ['+1 (212) 555-0198']);
   assert.deepEqual(matches[1].matchedEmails, ['PERSON@example.com']);
 });
+
+test('excludes the edited contact while retaining other duplicate matches', () => {
+  const editedContact = makeContact({
+    id: 7,
+    phones: ['+91 98765 43210'],
+    emails: ['same@example.com'],
+  });
+  const otherContact = makeContact({
+    id: 8,
+    phones: ['+91 98765 43210'],
+    emails: [],
+  });
+
+  const matches = findDuplicateContactMatches(
+    [editedContact, otherContact],
+    ['+91 98765 43210'],
+    ['same@example.com'],
+    7
+  );
+
+  assert.deepEqual(matches.map((match) => match.contact.id), [8]);
+});

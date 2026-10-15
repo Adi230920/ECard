@@ -5,8 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import { initDatabase } from './src/database/database';
 import { ActivityIndicator, View, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ThemeProvider, useAppTheme } from './src/theme/ThemeProvider';
 
-export default function App() {
+const AppContent = () => {
+  const { ready, theme } = useAppTheme();
   const [dbReady, setDbReady] = useState(false);
 
   useEffect(() => {
@@ -26,21 +28,29 @@ export default function App() {
     setup();
   }, []);
 
-  if (!dbReady) {
+  if (!dbReady || !ready) {
     return (
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#007AFF" />
-        </View>
-      </GestureHandlerRootView>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.canvas }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
     );
   }
 
   return (
+    <>
+      <AppNavigator />
+      <StatusBar animated style={theme.dark ? 'light' : 'dark'} />
+    </>
+  );
+};
+
+export default function App() {
+  return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AppNavigator />
-        <StatusBar style="auto" />
+        <ThemeProvider>
+          <AppContent />
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

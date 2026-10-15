@@ -5,14 +5,14 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.cardapp.ecard",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#DCEFEB",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -24,7 +24,15 @@
     },
     "plugins": [
       "expo-sqlite",
-      "expo-mlkit-ocr"
+      "expo-system-ui",
+      "expo-mlkit-ocr",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow ECard to check duplicates and save contacts to your phonebook."
+        }
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {

@@ -30,7 +30,8 @@ export class ContactRepository {
 
   async findPotentialDuplicates(
     phones: readonly string[],
-    emails: readonly string[]
+    emails: readonly string[],
+    excludedContactId?: number
   ): Promise<DuplicateContactMatch[]> {
     return [];
   }

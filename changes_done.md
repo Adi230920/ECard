@@ -4,3 +4,9 @@ Added offline card OCR with structured text review and errors.
 Removed unused backend and configured EAS preview builds for Android.
 Added offline contact parsing, editable review fields, filtering, and tests.
 Connected verified contacts to SQLite with validation and duplicate warnings.
+Implemented searchable contacts list with sorting, refresh, navigation, and states.
+Implemented complete contact details with resilient loading and image viewing.
+Added safe contact quick actions for calls, email, websites, WhatsApp.
+Added saved contact editing, duplicate warnings, deletion confirmations, and refreshing.
+Added safe offline phonebook export with permissions and duplicate warnings.
+Refined every screen with responsive components and persistent dual themes.

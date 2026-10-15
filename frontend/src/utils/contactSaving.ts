@@ -89,12 +89,15 @@ export const validateContactDraft = (draft: ContactDraft): string[] => {
 export const findDuplicateContactMatches = (
   contacts: readonly Contact[],
   phones: readonly string[],
-  emails: readonly string[]
+  emails: readonly string[],
+  excludedContactId?: number
 ): DuplicateContactMatch[] => {
   const candidatePhones = new Set(phones.map(normalizePhoneForComparison).filter(Boolean));
   const candidateEmails = new Set(emails.map(normalizeEmailForComparison).filter(Boolean));
 
   return contacts.flatMap((contact) => {
+    if (contact.id === excludedContactId) return [];
+
     const matchedPhones = contact.phones.filter((phone) =>
       candidatePhones.has(normalizePhoneForComparison(phone))
     );

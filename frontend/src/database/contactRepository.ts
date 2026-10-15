@@ -5,6 +5,11 @@ import {
   findDuplicateContactMatches,
   type DuplicateContactMatch,
 } from '../utils/contactSaving';
+import {
+  createContactSearchPattern,
+  GET_ALL_CONTACTS_SQL,
+  SEARCH_CONTACTS_SQL,
+} from './contactQueries';
 
 // Internal type mirroring the DB row
 interface DBContactRow {
@@ -50,9 +55,7 @@ export class ContactRepository {
 
   async getAll(): Promise<Contact[]> {
     if (!this.db) await this.init();
-    const rows = await this.db!.getAllAsync<DBContactRow>(
-      'SELECT * FROM contacts ORDER BY name ASC'
-    );
+    const rows = await this.db!.getAllAsync<DBContactRow>(GET_ALL_CONTACTS_SQL);
     return rows.map(mapRowToContact);
   }
 
@@ -134,20 +137,21 @@ export class ContactRepository {
 
   async search(query: string): Promise<Contact[]> {
     if (!this.db) await this.init();
-    const searchStr = `%${query}%`;
+    const searchPattern = createContactSearchPattern(query);
     const rows = await this.db!.getAllAsync<DBContactRow>(
-      'SELECT * FROM contacts WHERE name LIKE ? OR company LIKE ? ORDER BY name ASC',
-      [searchStr, searchStr]
+      SEARCH_CONTACTS_SQL,
+      [searchPattern, searchPattern]
     );
     return rows.map(mapRowToContact);
   }
 
   async findPotentialDuplicates(
     phones: readonly string[],
-    emails: readonly string[]
+    emails: readonly string[],
+    excludedContactId?: number
   ): Promise<DuplicateContactMatch[]> {
     const contacts = await this.getAll();
-    return findDuplicateContactMatches(contacts, phones, emails);
+    return findDuplicateContactMatches(contacts, phones, emails, excludedContactId);
   }
 }
 

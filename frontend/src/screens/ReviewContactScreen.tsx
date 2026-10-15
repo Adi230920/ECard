@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -25,6 +26,17 @@ import {
   type ContactDraft,
   type DuplicateContactMatch,
 } from '../utils/contactSaving';
+import {
+  createContactDraftFromSaved,
+  createEditableContactUpdate,
+  updateSavedContact,
+} from '../utils/contactEditing';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppButton } from '../components/ui/AppButton';
+import { BusinessCardPreview } from '../components/cards/BusinessCardPreview';
+import { useAppTheme } from '../theme/ThemeProvider';
+import { layout, radii, spacing, typography, type ThemeColors } from '../theme/tokens';
 
 type ReviewState =
   | { status: 'processing' }
@@ -60,8 +72,10 @@ const ContactField = ({
   onChangeText,
   keyboardType = 'default',
   multiline = false,
-}: ContactFieldProps) => (
-  <View style={styles.fieldContainer}>
+}: ContactFieldProps) => {
+  const styles = useReviewStyles();
+  const { theme } = useAppTheme();
+  return <View style={styles.fieldContainer}>
     <Text style={styles.fieldLabel}>{label}</Text>
     <TextInput
       accessibilityLabel={label}
@@ -71,11 +85,13 @@ const ContactField = ({
       multiline={multiline}
       onChangeText={onChangeText}
       placeholder={`Enter ${label.toLowerCase()}`}
+      placeholderTextColor={theme.colors.textMuted}
+      selectionColor={theme.colors.primary}
       style={[styles.input, multiline && styles.multilineInput]}
       value={value}
     />
-  </View>
-);
+  </View>;
+};
 
 interface MultiValueFieldProps {
   label: string;
@@ -85,6 +101,8 @@ interface MultiValueFieldProps {
 }
 
 const MultiValueField = ({ label, values, keyboardType, onChange }: MultiValueFieldProps) => {
+  const styles = useReviewStyles();
+  const { theme } = useAppTheme();
   const updateValue = (index: number, value: string) => {
     onChange(values.map((current, currentIndex) => (currentIndex === index ? value : current)));
   };
@@ -105,6 +123,8 @@ const MultiValueField = ({ label, values, keyboardType, onChange }: MultiValueFi
             keyboardType={keyboardType}
             onChangeText={(nextValue) => updateValue(index, nextValue)}
             placeholder={`Enter ${label.toLowerCase()}`}
+            placeholderTextColor={theme.colors.textMuted}
+            selectionColor={theme.colors.primary}
             style={[styles.input, styles.multiValueInput]}
             value={value}
           />
@@ -113,7 +133,7 @@ const MultiValueField = ({ label, values, keyboardType, onChange }: MultiValueFi
             onPress={() => removeValue(index)}
             style={styles.removeButton}
           >
-            <Text style={styles.removeButtonText}>Remove</Text>
+            <Ionicons color={theme.colors.danger} name="remove-circle-outline" size={22} />
           </TouchableOpacity>
         </View>
       ))}
@@ -125,10 +145,16 @@ const MultiValueField = ({ label, values, keyboardType, onChange }: MultiValueFi
 };
 
 export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenProps) => {
+  const styles = useReviewStyles();
+  const { theme } = useAppTheme();
+  const insets = useSafeAreaInsets();
   const imagePath = route.params?.imagePath;
+  const contactId = route.params?.contactId;
+  const isEditMode = contactId !== undefined;
   const [attempt, setAttempt] = useState(0);
   const [reviewState, setReviewState] = useState<ReviewState>({ status: 'processing' });
   const [contact, setContact] = useState<EditableContact>(EMPTY_CONTACT);
+  const [displayImagePath, setDisplayImagePath] = useState<string | undefined>(imagePath);
   const [showOriginalText, setShowOriginalText] = useState(false);
   const [recoveredText, setRecoveredText] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
@@ -137,8 +163,46 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
   useEffect(() => {
     let isActive = true;
 
-    const processCardImage = async () => {
+    const loadContactForm = async () => {
       setReviewState({ status: 'processing' });
+
+      if (contactId !== undefined) {
+        try {
+          const savedContact = await contactRepository.getById(contactId);
+          if (!isActive) return;
+
+          if (!savedContact) {
+            setReviewState({
+              status: 'error',
+              message: 'This saved contact is no longer available on this device.',
+            });
+            return;
+          }
+
+          const savedDraft = createContactDraftFromSaved(savedContact);
+          setContact(savedDraft);
+          setDisplayImagePath(savedContact.image_path ?? undefined);
+          setRecoveredText(new Set());
+          setShowOriginalText(false);
+          setReviewState({
+            status: 'success',
+            parsed: {
+              ...savedDraft,
+              originalText: savedContact.raw_ocr_text ?? '',
+              uncertainLines: [],
+              filteredLines: [],
+            },
+          });
+        } catch (error) {
+          if (!isActive) return;
+          console.error('Failed to load contact for editing:', error);
+          setReviewState({
+            status: 'error',
+            message: 'The saved contact could not be loaded. Please try again.',
+          });
+        }
+        return;
+      }
 
       if (!imagePath) {
         setReviewState({ status: 'error', message: 'No card image was provided.' });
@@ -146,6 +210,7 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
       }
 
       try {
+        setDisplayImagePath(imagePath);
         const result = await recognizeCardText(imagePath);
         if (!isActive) return;
 
@@ -180,12 +245,12 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
       }
     };
 
-    void processCardImage();
+    void loadContactForm();
 
     return () => {
       isActive = false;
     };
-  }, [attempt, imagePath]);
+  }, [attempt, contactId, imagePath]);
 
   const updateField = <Key extends keyof EditableContact>(
     key: Key,
@@ -207,8 +272,26 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
     setIsSaving(false);
   };
 
-  const saveContact = async (contactToSave: ContactInsert) => {
+  const saveContact = async (sanitized: ContactDraft, parsed: ParsedContact) => {
     try {
+      const editableContact = createEditableContactUpdate(sanitized);
+
+      if (contactId !== undefined) {
+        await updateSavedContact(contactRepository, contactId, editableContact);
+        Alert.alert(
+          'Contact updated',
+          'Your changes were saved locally on this device.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }],
+          { cancelable: false }
+        );
+        return;
+      }
+
+      const contactToSave: ContactInsert = {
+        ...editableContact,
+        image_path: imagePath ?? null,
+        raw_ocr_text: parsed.originalText,
+      };
       await contactRepository.insert(contactToSave);
       Alert.alert(
         'Contact saved',
@@ -217,10 +300,10 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
         { cancelable: false }
       );
     } catch (error) {
-      console.error('Failed to save contact:', error);
+      console.error(contactId !== undefined ? 'Failed to update contact:' : 'Failed to save contact:', error);
       finishSaving();
       Alert.alert(
-        'Could not save contact',
+        contactId !== undefined ? 'Could not update contact' : 'Could not save contact',
         'Your edits are still here. Please try saving again.'
       );
     }
@@ -253,25 +336,11 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
       return;
     }
 
-    const optionalText = (value: string): string | null => value || null;
-    const contactToSave: ContactInsert = {
-      name: optionalText(sanitized.name),
-      designation: optionalText(sanitized.designation),
-      company: optionalText(sanitized.company),
-      phones: sanitized.phones,
-      emails: sanitized.emails,
-      website: optionalText(sanitized.website),
-      address: optionalText(sanitized.address),
-      linkedin: optionalText(sanitized.linkedin),
-      notes: optionalText(sanitized.notes),
-      image_path: imagePath ?? null,
-      raw_ocr_text: parsed.originalText,
-    };
-
     try {
       const duplicates = await contactRepository.findPotentialDuplicates(
         sanitized.phones,
-        sanitized.emails
+        sanitized.emails,
+        contactId
       );
 
       if (duplicates.length > 0) {
@@ -280,14 +349,14 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
           `Matching saved contacts:\n\n${duplicates.map(describeDuplicate).join('\n')}`,
           [
             { text: 'Cancel', style: 'cancel', onPress: finishSaving },
-            { text: 'Save Anyway', onPress: () => void saveContact(contactToSave) },
+            { text: 'Save Anyway', onPress: () => void saveContact(sanitized, parsed) },
           ],
           { cancelable: false }
         );
         return;
       }
 
-      await saveContact(contactToSave);
+      await saveContact(sanitized, parsed);
     } catch (error) {
       console.error('Failed to check for duplicate contacts:', error);
       finishSaving();
@@ -325,11 +394,14 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
     return (
       <>
         <View style={styles.resultCard}>
-          <Text style={styles.heading}>Review contact</Text>
+          <Text style={styles.heading}>{isEditMode ? 'Edit contact' : 'Review contact'}</Text>
           <Text style={styles.helperText}>
-            Check every field and correct anything the card reader classified incorrectly.
+            {isEditMode
+              ? 'Update any saved details, then save your changes.'
+              : 'Check every field and correct anything the card reader classified incorrectly.'}
           </Text>
 
+          <Text style={styles.groupLabel}>IDENTITY</Text>
           <ContactField label="Name" value={contact.name} onChangeText={(value) => updateField('name', value)} />
           <ContactField
             label="Designation"
@@ -341,6 +413,8 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
             value={contact.company}
             onChangeText={(value) => updateField('company', value)}
           />
+          <View style={styles.groupDivider} />
+          <Text style={styles.groupLabel}>CONTACT</Text>
           <MultiValueField
             keyboardType="phone-pad"
             label="Phone"
@@ -353,6 +427,8 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
             onChange={(values) => updateField('emails', values)}
             values={contact.emails}
           />
+          <View style={styles.groupDivider} />
+          <Text style={styles.groupLabel}>ONLINE</Text>
           <ContactField
             keyboardType="url"
             label="Website"
@@ -365,6 +441,8 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
             value={contact.linkedin}
             onChangeText={(value) => updateField('linkedin', value)}
           />
+          <View style={styles.groupDivider} />
+          <Text style={styles.groupLabel}>ADDITIONAL</Text>
           <ContactField
             label="Address"
             multiline
@@ -379,7 +457,7 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
           />
         </View>
 
-        {parsed.uncertainLines.length > 0 || filtered.length > 0 ? (
+        {!isEditMode && (parsed.uncertainLines.length > 0 || filtered.length > 0) ? (
           <View style={styles.resultCard}>
             <Text style={styles.sectionTitle}>Other detected text</Text>
             <Text style={styles.helperText}>
@@ -394,41 +472,34 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
           </View>
         ) : null}
 
-        <View style={styles.resultCard}>
-          <TouchableOpacity onPress={() => setShowOriginalText((current) => !current)}>
-            <Text style={styles.originalTextToggle}>
-              {showOriginalText ? 'Hide original OCR text' : 'Show original OCR text'}
-            </Text>
-          </TouchableOpacity>
-          {showOriginalText ? (
-            <Text selectable style={styles.extractedText}>{parsed.originalText}</Text>
-          ) : null}
-        </View>
+        {parsed.originalText ? (
+          <View style={styles.resultCard}>
+            <TouchableOpacity onPress={() => setShowOriginalText((current) => !current)}>
+              <Text style={styles.originalTextToggle}>
+                {showOriginalText ? 'Hide original OCR text' : 'Show original OCR text'}
+              </Text>
+            </TouchableOpacity>
+            {showOriginalText ? (
+              <Text selectable style={styles.extractedText}>{parsed.originalText}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
-        <TouchableOpacity
-          accessibilityRole="button"
-          disabled={isSaving}
-          onPress={() => void handleSave(parsed)}
-          style={[styles.primaryButton, isSaving && styles.disabledPrimaryButton]}
-        >
-          {isSaving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Save Contact</Text>
-          )}
-        </TouchableOpacity>
       </>
     );
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      {imagePath ? <Image source={{ uri: imagePath }} style={styles.cardImage} resizeMode="contain" /> : null}
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0} style={styles.screen}>
+    <ScrollView contentContainerStyle={[styles.container, reviewState.status === 'success' && styles.containerWithActionBar]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      {displayImagePath ? (
+        <View style={styles.cardPreview}><BusinessCardPreview compact uri={displayImagePath} /></View>
+      ) : null}
 
       {reviewState.status === 'processing' ? (
         <View style={styles.resultCard}>
           <View style={styles.centeredState}>
-            <ActivityIndicator size="large" color="#007AFF" />
+            <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={styles.stateText}>Reading and organizing card details on this device…</Text>
           </View>
         </View>
@@ -448,7 +519,9 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
       {reviewState.status === 'error' ? (
         <View style={styles.resultCard}>
           <View style={styles.centeredState}>
-            <Text style={styles.stateTitle}>Could not read this card</Text>
+            <Text style={styles.stateTitle}>
+              {isEditMode ? 'Could not load contact' : 'Could not read this card'}
+            </Text>
             <Text style={styles.stateText}>{reviewState.message}</Text>
           </View>
         </View>
@@ -460,51 +533,59 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
         </TouchableOpacity>
       ) : null}
 
-      <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.goBack()}>
-        <Text style={styles.secondaryButtonText}>Back to Scan</Text>
-      </TouchableOpacity>
+      {reviewState.status !== 'success' ? (
+        <TouchableOpacity accessibilityRole="button" disabled={isSaving} onPress={() => navigation.goBack()} style={[styles.secondaryButton, isSaving && styles.disabledButton]}>
+          <Text style={styles.secondaryButtonText}>{isEditMode ? 'Cancel' : 'Back to Scan'}</Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
+    {reviewState.status === 'success' ? (
+      <View style={[styles.actionBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+        <AppButton disabled={isSaving} label="Cancel" onPress={() => navigation.goBack()} style={styles.actionBarButton} variant="secondary" />
+        <AppButton icon="checkmark" label={isEditMode ? 'Save changes' : 'Save contact'} loading={isSaving} onPress={() => void handleSave(reviewState.parsed)} style={styles.actionBarButton} />
+      </View>
+    ) : null}
+    </KeyboardAvoidingView>
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ThemeColors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.canvas },
   container: {
     flexGrow: 1,
-    padding: 20,
-    backgroundColor: '#F8F9FA',
-  },
-  cardImage: {
     width: '100%',
-    height: 220,
-    marginBottom: 20,
-    borderRadius: 12,
-    backgroundColor: '#E9ECEF',
+    maxWidth: layout.contentMaxWidth,
+    alignSelf: 'center',
+    padding: spacing.xl,
+    backgroundColor: colors.canvas,
   },
+  containerWithActionBar: { paddingBottom: 112 },
+  cardPreview: { marginBottom: spacing.xl },
   resultCard: {
     marginBottom: 16,
     padding: 18,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
+    borderRadius: radii.surface,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#DEE2E6',
+    borderColor: colors.border,
   },
   heading: {
     marginBottom: 6,
     fontSize: 22,
     fontWeight: '700',
-    color: '#212529',
+    color: colors.text,
   },
   sectionTitle: {
     marginBottom: 4,
     fontSize: 18,
     fontWeight: '700',
-    color: '#212529',
+    color: colors.text,
   },
   helperText: {
     marginBottom: 18,
     fontSize: 14,
     lineHeight: 20,
-    color: '#6C757D',
+    color: colors.textSecondary,
   },
   fieldContainer: {
     marginBottom: 16,
@@ -513,18 +594,18 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontSize: 14,
     fontWeight: '600',
-    color: '#343A40',
+    color: colors.textSecondary,
   },
   input: {
     minHeight: 46,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#CED4DA',
+    borderColor: colors.border,
     borderRadius: 8,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.surface,
     fontSize: 16,
-    color: '#212529',
+    color: colors.text,
   },
   multilineInput: {
     minHeight: 88,
@@ -540,13 +621,10 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-  },
-  removeButtonText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#C92A2A',
+    width: 48,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButton: {
     alignSelf: 'flex-start',
@@ -555,12 +633,12 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#0066CC',
+    color: colors.primary,
   },
   recoveryRow: {
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: '#E9ECEF',
+    borderTopColor: colors.border,
   },
   recoveryTextContainer: {
     marginBottom: 8,
@@ -568,38 +646,38 @@ const styles = StyleSheet.create({
   recoveryText: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#212529',
+    color: colors.text,
   },
   recoveryReason: {
     marginTop: 3,
     fontSize: 12,
-    color: '#868E96',
+    color: colors.textMuted,
   },
   recoverButton: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 6,
-    backgroundColor: '#E7F5FF',
+    backgroundColor: colors.accentSoft,
   },
   disabledButton: {
-    backgroundColor: '#E9ECEF',
+    backgroundColor: colors.surfaceSubtle,
   },
   recoverButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0066CC',
+    color: colors.accent,
   },
   originalTextToggle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#0066CC',
+    color: colors.primary,
   },
   extractedText: {
     marginTop: 14,
     fontSize: 15,
     lineHeight: 22,
-    color: '#343A40',
+    color: colors.textSecondary,
   },
   centeredState: {
     minHeight: 140,
@@ -610,29 +688,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontSize: 18,
     fontWeight: '600',
-    color: '#212529',
+    color: colors.text,
   },
   stateText: {
     marginTop: 12,
     textAlign: 'center',
     fontSize: 15,
     lineHeight: 21,
-    color: '#6C757D',
+    color: colors.textSecondary,
   },
   primaryButton: {
     marginTop: 4,
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
-    backgroundColor: '#007AFF',
-  },
-  disabledPrimaryButton: {
-    opacity: 0.65,
+    backgroundColor: colors.primary,
   },
   primaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   secondaryButton: {
     marginTop: 12,
@@ -640,12 +715,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#ADB5BD',
-    backgroundColor: '#FFFFFF',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   secondaryButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#495057',
+    color: colors.text,
   },
+  groupLabel: { ...typography.label, color: colors.primary, letterSpacing: 0.9, marginBottom: spacing.md },
+  groupDivider: { height: 1, backgroundColor: colors.border, marginTop: spacing.xs, marginBottom: spacing.xl },
+  actionBar: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.surfaceElevated },
+  actionBarButton: { flex: 1 },
 });
+
+const useReviewStyles = () => {
+  const { theme } = useAppTheme();
+  return useMemo(() => createStyles(theme.colors), [theme.colors]);
+};

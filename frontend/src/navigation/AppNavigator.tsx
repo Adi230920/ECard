@@ -7,13 +7,27 @@ import { ScanScreen } from '../screens/ScanScreen';
 import { ReviewContactScreen } from '../screens/ReviewContactScreen';
 import { ContactsScreen } from '../screens/ContactsScreen';
 import { ContactDetailScreen } from '../screens/ContactDetailScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { useAppTheme } from '../theme/ThemeProvider';
+import { createNavigationTheme } from '../theme/navigationTheme';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator = () => {
+  const { theme } = useAppTheme();
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
+    <NavigationContainer theme={createNavigationTheme(theme)}>
+      <Stack.Navigator
+        initialRouteName="Home"
+        screenOptions={{
+          contentStyle: { backgroundColor: theme.colors.canvas },
+          headerBackButtonDisplayMode: 'minimal',
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: theme.colors.surface },
+          headerTintColor: theme.colors.text,
+          headerTitleStyle: { fontWeight: '700' },
+        }}
+      >
         <Stack.Screen 
           name="Home" 
           component={HomeScreen} 
@@ -27,7 +41,9 @@ export const AppNavigator = () => {
         <Stack.Screen 
           name="ReviewContact" 
           component={ReviewContactScreen} 
-          options={{ title: 'Review Contact' }}
+          options={({ route }) => ({
+            title: route.params?.contactId !== undefined ? 'Edit Contact' : 'Review Contact',
+          })}
         />
         <Stack.Screen 
           name="Contacts" 
@@ -39,6 +55,7 @@ export const AppNavigator = () => {
           component={ContactDetailScreen} 
           options={{ title: 'Contact Details' }}
         />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
