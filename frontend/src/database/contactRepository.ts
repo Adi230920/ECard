@@ -10,32 +10,7 @@ import {
   GET_ALL_CONTACTS_SQL,
   SEARCH_CONTACTS_SQL,
 } from './contactQueries';
-
-// Internal type mirroring the DB row
-interface DBContactRow {
-  id: number;
-  name: string | null;
-  designation: string | null;
-  company: string | null;
-  phones: string | null; // JSON string
-  emails: string | null; // JSON string
-  website: string | null;
-  address: string | null;
-  linkedin: string | null;
-  notes: string | null;
-  image_path: string | null;
-  raw_ocr_text: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-const mapRowToContact = (row: DBContactRow): Contact => {
-  return {
-    ...row,
-    phones: row.phones ? JSON.parse(row.phones) : [],
-    emails: row.emails ? JSON.parse(row.emails) : [],
-  };
-};
+import { mapRowToContact, type DBContactRow } from './contactRowMapping';
 
 export class ContactRepository {
   private db: SQLite.SQLiteDatabase | null = null;

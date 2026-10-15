@@ -10,3 +10,4 @@ Added safe contact quick actions for calls, email, websites, WhatsApp.
 Added saved contact editing, duplicate warnings, deletion confirmations, and refreshing.
 Added safe offline phonebook export with permissions and duplicate warnings.
 Refined every screen with responsive components and persistent dual themes.
+Audited stabilized secured and tested ECard V1 Android application changes.

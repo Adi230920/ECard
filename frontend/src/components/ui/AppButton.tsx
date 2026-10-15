@@ -39,6 +39,7 @@ export const AppButton = ({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: unavailable, busy: loading }}
       disabled={unavailable}
       {...props}
       style={({ pressed }) => [
@@ -73,7 +74,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  compact: { minHeight: 44, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  compact: { minHeight: layout.minTouchTarget, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   label: { ...typography.body, fontWeight: '700', textAlign: 'center' },
   icon: { marginRight: spacing.sm },
   disabled: { opacity: 0.55 },

@@ -85,7 +85,7 @@ export const ContactsScreen = ({ navigation }: ContactsScreenProps) => {
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           keyExtractor={(item) => item.id.toString()}
-          ListEmptyComponent={<EmptyState actionLabel={hasQuery ? undefined : 'Scan a card'} icon={hasQuery ? 'search-outline' : 'people-outline'} message={hasQuery ? 'Try another name, company, or designation.' : 'Scan a business card to start your searchable directory.'} onAction={hasQuery ? undefined : () => navigation.navigate('Scan')} title={hasQuery ? 'No matching contacts' : 'No contacts yet'} />}
+          ListEmptyComponent={<EmptyState actionLabel={hasQuery ? undefined : 'Scan a card'} icon={hasQuery ? 'search-outline' : 'people-outline'} message={hasQuery ? 'Try another name or company.' : 'Scan a business card to start your searchable directory.'} onAction={hasQuery ? undefined : () => navigation.navigate('Scan')} title={hasQuery ? 'No matching contacts' : 'No contacts yet'} />}
           renderItem={({ item }) => <ContactRow contact={item} onPress={() => navigation.navigate('ContactDetails', { contactId: item.id })} />}
           showsVerticalScrollIndicator={false}
         />

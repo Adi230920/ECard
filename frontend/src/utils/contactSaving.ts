@@ -1,4 +1,9 @@
 import type { Contact } from '../types/contact';
+import {
+  createEmailUrl,
+  createLinkedInUrl,
+  createWebsiteUrl,
+} from './contactQuickActions.ts';
 
 export interface ContactDraft {
   name: string;
@@ -19,6 +24,7 @@ export interface DuplicateContactMatch {
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F]/;
 
 export const normalizePhoneForComparison = (value: string): string => {
   const extension = value.match(/(?:x|ext\.?|extension)\s*(\d+)/i)?.[1];
@@ -79,8 +85,29 @@ export const validateContactDraft = (draft: ContactDraft): string[] => {
     errors.push('Each phone number must contain at least three digits.');
   }
 
-  if (draft.emails.some((email) => !EMAIL_PATTERN.test(email))) {
+  if (
+    draft.phones.some((phone) => {
+      const digitCount = phone.replace(/\D/g, '').length;
+      return CONTROL_CHARACTER_PATTERN.test(phone) || digitCount > 15;
+    })
+  ) {
+    errors.push('Each phone number must contain no more than fifteen digits.');
+  }
+
+  if (draft.emails.some((email) => !EMAIL_PATTERN.test(email) || !createEmailUrl(email).url)) {
     errors.push('Check that each email address is complete.');
+  }
+
+  if (draft.website && !createWebsiteUrl(draft.website).url) {
+    errors.push('Check that the website uses a valid HTTP or HTTPS address.');
+  }
+
+  if (draft.linkedin && !createLinkedInUrl(draft.linkedin).url) {
+    errors.push('Check that LinkedIn contains a valid profile or company address.');
+  }
+
+  if (textValues.some((value) => CONTROL_CHARACTER_PATTERN.test(value))) {
+    errors.push('Contact text cannot contain unsupported control characters.');
   }
 
   return errors;

@@ -617,7 +617,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   detailValueButton: {
     alignSelf: 'flex-start',
-    minHeight: 36,
+    minHeight: 48,
     justifyContent: 'center',
   },
   actionableDetailValue: {
@@ -629,7 +629,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -669,8 +669,10 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     top: 48,
     right: 20,
     zIndex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    minWidth: 48,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: 20,
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
   },

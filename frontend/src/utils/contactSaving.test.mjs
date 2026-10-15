@@ -72,6 +72,26 @@ test('allows incomplete cards while validating provided contact values', () => {
   );
 });
 
+test('rejects unsafe or unusable contact values before saving', () => {
+  const errors = validateContactDraft(
+    makeDraft({
+      name: 'Unsafe\u0000Name',
+      phones: ['1234567890123456'],
+      emails: ['person@example.com?subject=unsafe'],
+      website: 'javascript:alert(1)',
+      linkedin: 'https://example.com/in/person',
+    })
+  );
+
+  assert.deepEqual(errors, [
+    'Each phone number must contain no more than fifteen digits.',
+    'Check that each email address is complete.',
+    'Check that the website uses a valid HTTP or HTTPS address.',
+    'Check that LinkedIn contains a valid profile or company address.',
+    'Contact text cannot contain unsupported control characters.',
+  ]);
+});
+
 test('finds duplicates only through normalized phones and emails', () => {
   const phoneMatch = makeContact({
     id: 1,

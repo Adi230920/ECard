@@ -37,6 +37,7 @@ import { AppButton } from '../components/ui/AppButton';
 import { BusinessCardPreview } from '../components/cards/BusinessCardPreview';
 import { useAppTheme } from '../theme/ThemeProvider';
 import { layout, radii, spacing, typography, type ThemeColors } from '../theme/tokens';
+import { deleteAbandonedCardImage } from '../utils/imageStorage';
 
 type ReviewState =
   | { status: 'processing' }
@@ -130,6 +131,7 @@ const MultiValueField = ({ label, values, keyboardType, onChange }: MultiValueFi
           />
           <TouchableOpacity
             accessibilityLabel={`Remove ${label.toLowerCase()} ${index + 1}`}
+            accessibilityRole="button"
             onPress={() => removeValue(index)}
             style={styles.removeButton}
           >
@@ -137,7 +139,7 @@ const MultiValueField = ({ label, values, keyboardType, onChange }: MultiValueFi
           </TouchableOpacity>
         </View>
       ))}
-      <TouchableOpacity onPress={() => onChange([...values, ''])} style={styles.addButton}>
+      <TouchableOpacity accessibilityRole="button" onPress={() => onChange([...values, ''])} style={styles.addButton}>
         <Text style={styles.addButtonText}>+ Add {label.toLowerCase()}</Text>
       </TouchableOpacity>
     </View>
@@ -159,6 +161,18 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
   const [recoveredText, setRecoveredText] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const saveInProgress = useRef(false);
+  const imageCommitted = useRef(isEditMode);
+
+  useEffect(() => {
+    if (isEditMode || !imagePath) return;
+
+    return () => {
+      if (imageCommitted.current || saveInProgress.current) return;
+      void deleteAbandonedCardImage(imagePath).catch((error) =>
+        console.warn('Unable to remove abandoned card image', error)
+      );
+    };
+  }, [imagePath, isEditMode]);
 
   useEffect(() => {
     let isActive = true;
@@ -293,6 +307,7 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
         raw_ocr_text: parsed.originalText,
       };
       await contactRepository.insert(contactToSave);
+      imageCommitted.current = true;
       Alert.alert(
         'Contact saved',
         'The contact was saved locally on this device.',
@@ -379,6 +394,7 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
           {item.reason ? <Text style={styles.recoveryReason}>{item.reason}</Text> : null}
         </View>
         <TouchableOpacity
+          accessibilityRole="button"
           disabled={isRecovered}
           onPress={() => addToNotes(key, item.text)}
           style={[styles.recoverButton, isRecovered && styles.disabledButton]}
@@ -474,7 +490,7 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
 
         {parsed.originalText ? (
           <View style={styles.resultCard}>
-            <TouchableOpacity onPress={() => setShowOriginalText((current) => !current)}>
+            <TouchableOpacity accessibilityRole="button" onPress={() => setShowOriginalText((current) => !current)} style={styles.originalTextButton}>
               <Text style={styles.originalTextToggle}>
                 {showOriginalText ? 'Hide original OCR text' : 'Show original OCR text'}
               </Text>
@@ -528,7 +544,7 @@ export const ReviewContactScreen = ({ route, navigation }: ReviewContactScreenPr
       ) : null}
 
       {reviewState.status !== 'processing' && reviewState.status !== 'success' ? (
-        <TouchableOpacity style={styles.primaryButton} onPress={() => setAttempt((value) => value + 1)}>
+        <TouchableOpacity accessibilityRole="button" style={styles.primaryButton} onPress={() => setAttempt((value) => value + 1)}>
           <Text style={styles.primaryButtonText}>Try Again</Text>
         </TouchableOpacity>
       ) : null}
@@ -597,7 +613,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textSecondary,
   },
   input: {
-    minHeight: 46,
+    minHeight: 48,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
@@ -628,6 +644,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   addButton: {
     alignSelf: 'flex-start',
+    minHeight: 48,
+    justifyContent: 'center',
     paddingVertical: 6,
   },
   addButtonText: {
@@ -655,6 +673,8 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   recoverButton: {
     alignSelf: 'flex-start',
+    minHeight: 48,
+    justifyContent: 'center',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 6,
@@ -673,6 +693,7 @@ const createStyles = (colors: ThemeColors) => StyleSheet.create({
     fontWeight: '600',
     color: colors.primary,
   },
+  originalTextButton: { minHeight: 48, justifyContent: 'center' },
   extractedText: {
     marginTop: 14,
     fontSize: 15,

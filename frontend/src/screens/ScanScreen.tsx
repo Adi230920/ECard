@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -25,6 +25,7 @@ export const ScanScreen = ({ navigation }: ScanScreenProps) => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  const nativeActionInProgress = useRef(false);
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { theme } = useAppTheme();
@@ -69,17 +70,32 @@ export const ScanScreen = ({ navigation }: ScanScreenProps) => {
   }, [permission, requestPermission]);
 
   const handleCapture = async () => {
-    if (!cameraRef.current || isProcessing) return;
+    if (!cameraRef.current || nativeActionInProgress.current) return;
+    nativeActionInProgress.current = true;
+    setIsProcessing(true);
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
       if (photo?.uri) { resetZoom(); setCapturedImage(photo.uri); }
     } catch (error) { Alert.alert('Could not capture card', 'Please try taking the photo again.'); console.error(error); }
+    finally { nativeActionInProgress.current = false; setIsProcessing(false); }
   };
   const handlePickFromGallery = async () => {
+    if (nativeActionInProgress.current) return;
+    nativeActionInProgress.current = true;
+    setIsProcessing(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
       if (!result.canceled && result.assets.length > 0) { resetZoom(); setCapturedImage(result.assets[0].uri); }
     } catch (error) { Alert.alert('Could not open gallery', 'Please try selecting the image again.'); console.error(error); }
+    finally { nativeActionInProgress.current = false; setIsProcessing(false); }
+  };
+  const handleOpenSettings = async () => {
+    try {
+      await Linking.openSettings();
+    } catch (error) {
+      console.error('Could not open application settings:', error);
+      Alert.alert('Could not open settings', 'Open ECard permissions from Android settings.');
+    }
   };
   const handleRotate = async () => {
     if (!capturedImage) return;
@@ -101,13 +117,14 @@ export const ScanScreen = ({ navigation }: ScanScreenProps) => {
   if (!permission) return <View style={[styles.centered, { backgroundColor: theme.colors.canvas }]}><ActivityIndicator color={theme.colors.primary} size="large" /></View>;
   if (!permission.granted) {
     return (
-      <View style={[styles.permission, { backgroundColor: theme.colors.canvas }]}>
+      <ScrollView contentContainerStyle={[styles.permission, { backgroundColor: theme.colors.canvas }]}>
         <View style={[styles.permissionIcon, { backgroundColor: theme.colors.primarySoft }]}><Ionicons color={theme.colors.primary} name="camera-outline" size={32} /></View>
         <Text style={[styles.permissionTitle, { color: theme.colors.text }]}>Camera access is needed</Text>
         <Text style={[styles.permissionText, { color: theme.colors.textSecondary }]}>ECard uses the camera only to capture a business card for on-device text recognition.</Text>
         {permission.canAskAgain ? <AppButton icon="camera-outline" label="Allow camera" onPress={() => void requestPermission()} style={styles.permissionButton} /> : null}
-        <AppButton icon="images-outline" label="Choose from gallery" onPress={() => void handlePickFromGallery()} variant="secondary" style={styles.permissionButton} />
-      </View>
+        {!permission.canAskAgain ? <AppButton icon="settings-outline" label="Open settings" onPress={() => void handleOpenSettings()} style={styles.permissionButton} /> : null}
+        <AppButton disabled={isProcessing} icon="images-outline" label="Choose from gallery" loading={isProcessing} onPress={() => void handlePickFromGallery()} variant="secondary" style={styles.permissionButton} />
+      </ScrollView>
     );
   }
 
@@ -144,10 +161,10 @@ export const ScanScreen = ({ navigation }: ScanScreenProps) => {
         </View>
       </View>
       <View style={[styles.captureTray, { paddingBottom: Math.max(insets.bottom + spacing.md, spacing.xxl) }]}>
-        <Pressable accessibilityLabel="Choose card image from gallery" accessibilityRole="button" onPress={() => void handlePickFromGallery()} style={({ pressed }) => [styles.galleryButton, pressed && styles.pressed]}>
+        <Pressable accessibilityLabel="Choose card image from gallery" accessibilityRole="button" disabled={isProcessing} onPress={() => void handlePickFromGallery()} style={({ pressed }) => [styles.galleryButton, pressed && styles.pressed, isProcessing && styles.disabled]}>
           <Ionicons color="#FFFFFF" name="images-outline" size={24} /><Text style={styles.controlLabel}>Gallery</Text>
         </Pressable>
-        <Pressable accessibilityLabel="Capture business card" accessibilityRole="button" disabled={Platform.OS === 'web'} onPress={() => void handleCapture()} style={({ pressed }) => [styles.captureButton, pressed && styles.capturePressed, Platform.OS === 'web' && styles.disabled]}><View style={styles.captureInner} /></Pressable>
+        <Pressable accessibilityLabel="Capture business card" accessibilityRole="button" disabled={Platform.OS === 'web' || isProcessing} onPress={() => void handleCapture()} style={({ pressed }) => [styles.captureButton, pressed && styles.capturePressed, (Platform.OS === 'web' || isProcessing) && styles.disabled]}><View style={styles.captureInner} /></Pressable>
         <View style={styles.controlSpacer} />
       </View>
     </View>
@@ -157,7 +174,7 @@ export const ScanScreen = ({ navigation }: ScanScreenProps) => {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  permission: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
+  permission: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xxl },
   permissionIcon: { width: 72, height: 72, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xl },
   permissionTitle: { ...typography.title, textAlign: 'center' },
   permissionText: { ...typography.body, textAlign: 'center', maxWidth: 420, marginTop: spacing.sm, marginBottom: spacing.xl },
@@ -188,7 +205,7 @@ const styles = StyleSheet.create({
   previewTopBar: { position: 'absolute', top: spacing.lg, left: spacing.lg, right: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   previewHint: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, minHeight: 40, borderRadius: radii.pill, backgroundColor: 'rgba(0,0,0,0.48)' },
   previewHintText: { ...typography.label, color: '#FFFFFF', marginLeft: spacing.xs },
-  overlayButton: { minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: 'rgba(0,0,0,0.58)', flexDirection: 'row', alignItems: 'center' },
+  overlayButton: { minHeight: 48, paddingHorizontal: spacing.md, borderRadius: radii.pill, backgroundColor: 'rgba(0,0,0,0.58)', flexDirection: 'row', alignItems: 'center' },
   overlayButtonText: { ...typography.secondary, color: '#FFFFFF', fontWeight: '700', marginLeft: spacing.xs },
   actionTray: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
   actionButton: { flex: 1 },
